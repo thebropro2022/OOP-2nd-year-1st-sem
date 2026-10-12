@@ -1,0 +1,215 @@
+#include <cassert>
+#include <cstddef>
+#include <initializer_list>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
+
+class queue {
+public:
+    using value_type      = int;
+    using reference       = int&;
+    using const_reference = const int&;
+    using size_type       = std::size_t;
+
+    queue() : head_(nullptr), tail_(nullptr), size_(0) {}
+
+    explicit queue(size_type n) : queue() { resize(n); }
+
+    queue(const int arr[], size_type n) : queue() {
+        for (size_type i = 0; i < n; ++i) push(arr[i]);
+    }
+
+    queue(std::initializer_list<int> list) : queue() {
+        for (int v : list) push(v);
+    }
+
+    queue(const queue& other) : queue() {
+        for (Node* p = other.head_; p; p = p->next) push(p->value);
+    }
+
+    queue(queue&& other) noexcept
+        : head_(other.head_), tail_(other.tail_), size_(other.size_) {
+        other.head_ = other.tail_ = nullptr;
+        other.size_ = 0;
+    }
+
+    ~queue() { clear(); }
+
+    queue& operator=(queue other) {
+        swap(other);
+        return *this;
+    }
+
+    bool empty() const { return size_ == 0; }
+    size_type size() const { return size_; }
+
+    reference front() {
+        check_not_empty();
+        return head_->value;
+    }
+
+    reference back() {
+        check_not_empty();
+        return tail_->value;
+    }
+
+    void push(const value_type& x) {
+        Node* n = new Node{x, tail_, nullptr};
+        if (tail_) tail_->next = n;
+        else       head_ = n;          // список был пуст — n становится и head_
+        tail_ = n;
+        ++size_;
+    }
+    void emplace(int x) { push(x); }
+
+    void pop() {
+        check_not_empty();
+        Node* old = head_;
+        head_ = head_->next;
+        if (head_) head_->prev = nullptr;
+        else       tail_ = nullptr;    // список опустел
+        delete old;
+        --size_;
+    }
+
+    void swap(queue& q) noexcept {
+        std::swap(head_, q.head_);
+        std::swap(tail_, q.tail_);
+        std::swap(size_, q.size_);
+    }
+
+    size_type length() const { return size_; }
+
+    int at(int index) const {
+        check_not_empty();
+        size_type i = index < 0 ? 0 : static_cast<size_type>(index);
+        if (i >= size_) i = size_ - 1;
+        return item(i);
+    }
+
+    void clear() {
+        Node* p = head_;
+        while (p) {
+            Node* next = p->next;
+            delete p;
+            p = next;
+        }
+        head_ = tail_ = nullptr;
+        size_ = 0;
+    }
+
+    void resize(size_type n) {
+        while (size_ < n) push(0);
+        while (size_ > n) pop_back();
+    }
+
+    void assign(size_type n, int value) {
+        clear();
+        for (size_type i = 0; i < n; ++i) push(value);
+    }
+
+    static bool is_equal(const queue& a, const queue& b) {
+        if (a.size_ != b.size_) return false;
+        Node* pa = a.head_;
+        Node* pb = b.head_;
+        while (pa) {
+            if (pa->value != pb->value) return false;
+            pa = pa->next;
+            pb = pb->next;
+        }
+        return true;
+    }
+
+    friend bool operator==(const queue& x, const queue& y) { return is_equal(x, y); }
+    friend bool operator!=(const queue& x, const queue& y) { return !(x == y); }
+    friend bool operator<(const queue& x, const queue& y) {
+        Node* px = x.head_;
+        Node* py = y.head_;
+        while (px && py) {
+            if (px->value < py->value) return true;
+            if (py->value < px->value) return false;
+            px = px->next;
+            py = py->next;
+        }
+        return x.size_ < y.size_;
+    }
+
+private:
+    struct Node {
+        int value;
+        Node* prev;
+        Node* next;
+    };
+
+    Node* head_;
+    size_type size_;
+    Node* tail_;
+
+    int item(size_type i) const {
+        Node* p = head_;
+        for (size_type k = 0; k < i; ++k) p = p->next;
+        return p->value;
+    }
+
+    void check_not_empty() const {
+        if (size_ == 0) throw std::out_of_range("очередь пуста");
+    }
+
+    // вспомогательный метод для resize() — убрать последний элемент
+    void pop_back() {
+        check_not_empty();
+        Node* old = tail_;
+        tail_ = tail_->prev;
+        if (tail_) tail_->next = nullptr;
+        else       head_ = nullptr;
+        delete old;
+        --size_;
+    }
+};
+
+void swap(queue& x, queue& y) noexcept { x.swap(y); }
+
+void print(const queue& q) {
+    std::cout << "[";
+    for (std::size_t i = 0; i < q.size(); ++i) std::cout << q.at(static_cast<int>(i)) << ' ';
+    std::cout << "]\n";
+}
+
+using container = queue;
+
+int main() {
+    container a({1, 4, 7, 9});
+
+    assert(4 == a.size());
+    assert(1 == a.at(0));
+    assert(9 == a.at(10));
+    print(a);
+
+    container b(a);
+
+    assert(container::is_equal(a, b));
+    assert(a == b);
+    b.clear();
+    assert(b.empty());
+
+    container c;
+    assert(c.empty());
+    c.assign(3, 7);
+    assert(3 == c.size());
+
+    container d(5);
+
+    assert(5 == d.size());
+    d.resize(10);
+    b.swap(d);
+    assert(10 == b.size());
+    assert(d.empty());
+
+    container e = std::move(b);
+
+    assert(10 == e.size());
+    assert(b.empty());
+
+    int array[] = {1, 4, 7, 9};
+}
